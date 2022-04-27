@@ -239,7 +239,7 @@ path_name = config_tb_path + \
 net.apply(weights_init_uniform_rule)
 
 train_net(
-    epochs=config_epochs, path_name="/home/souravrai/lottery/adrian/lottery/50pec_early_stopping", net=net, optimizer=optimizer)
+    epochs=config_epochs, path_name="/logs", net=net, optimizer=optimizer)
 
 # Dump some info on the range of parameters after training is finished
 for param in net.parameters():
