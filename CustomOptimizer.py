@@ -21,7 +21,8 @@ class CustomOptimizer(Optimizer):
     """
 
     def __init__(self, params, lr=1e-2, lr_decay=0, momentum=0, dampening=0,
-                 weight_decay=0,initial_accumulator_value=0, nesterov=False):
+                 weight_decay=0,nesterov=False,prune_epoch=60,step_of_prune=0,
+                 perc_to_prune=0,len_step=0):
         if not 0.0 <= lr:
             raise ValueError("Invalid learning rate: {}".format(lr))
         if momentum < 0.0:
@@ -29,8 +30,9 @@ class CustomOptimizer(Optimizer):
         if weight_decay < 0.0:
             raise ValueError("Invalid weight_decay value: {}".format(weight_decay))
 
-        defaults = dict(lr=lr, momentum=momentum, dampening=dampening,
-                        weight_decay=weight_decay, nesterov=nesterov)
+        defaults = dict(lr=lr, momentum=momentum, dampening=dampening,prune_epoch=prune_epoch,
+        step_of_prune=step_of_prune,perc_to_prune=perc_to_prune,len_step=len_step,
+        weight_decay=weight_decay, nesterov=nesterov)
         if nesterov and (momentum <= 0 or dampening != 0):
             raise ValueError("Nesterov momentum requires a momentum and zero dampening")
         super(CustomOptimizer, self).__init__(params, defaults)
@@ -39,7 +41,6 @@ class CustomOptimizer(Optimizer):
             for p in group['params']:
                 state = self.state[p]
                 state['step'] = 0
-                state['sum'] = torch.full_like(p, initial_accumulator_value, memory_format=torch.preserve_format)
                 state["mask"] = torch.ones_like(p)
 
 
@@ -67,6 +68,7 @@ class CustomOptimizer(Optimizer):
             momentum = group['momentum']
             dampening = group['dampening']
             nesterov = group['nesterov']
+            
             EPS = 1e-6
             for p in group['params']:
                 if p.grad is None:
@@ -98,8 +100,8 @@ class CustomOptimizer(Optimizer):
                
 
                     
-                if state["step"] == 2*600+1:
-                    q = torch.quantile(abs(p),0.5)
+                if state["step"] == group["prune_epoch"]*group['len_step']+group["step_of_prune"]:
+                    q = torch.quantile(abs(p),group["perc_to_prune"])
                     print(q)
                     p[abs(p)<q] = 0
                     p_np = p.cpu().detach().numpy()

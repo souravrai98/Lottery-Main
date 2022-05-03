@@ -39,17 +39,17 @@ def flat_weight_dump(model):
     return flat_tensor
 
 
-def tb_dump(epoch, net, writer):
+def tb_dump(epoch, net, writer1,writer2):
     """ Routine for dumping info on tensor board at the end of an epoch """
     print('=> eval on test data')
     (test_loss, test_acc, _) = test(testloader, net, device)
-    writer.add_scalar('Loss/test', test_loss, epoch)
-    writer.add_scalar('Accuracy/test', test_acc, epoch)
+    writer1.add_scalar('Loss/test', test_loss, epoch)
+    writer1.add_scalar('Accuracy', test_acc, epoch)
 
     print('=> eval on train data')
     (train_loss, train_acc, _) = test(trainloader, net, device)
-    writer.add_scalar('Loss/train', train_loss, epoch)
-    writer.add_scalar('Accuracy/train', train_acc, epoch)
+    writer2.add_scalar('Loss/train', train_loss, epoch)
+    writer2.add_scalar('Accuracy', train_acc, epoch)
     print('epoch %d done\n' % (epoch))
 
 
@@ -75,14 +75,15 @@ def test(testloader, net, device):
     return (loss.item() / total, 100.0*correct/total, total)
 
 # Trains the network
-def train_net(epochs, path_name, net, optimizer):
+def train_net(epochs, path_name_test,path_name_train, net, optimizer):
     """ Train the network """
     print(optimizer)
-    writer = SummaryWriter(path_name)
+    writer1 = SummaryWriter(path_name_test)
+    writer2 = SummaryWriter(path_name_train)
     n_iter = 0
     
     # Dump info on the network before running any training step
-    tb_dump(0, net, writer)
+    tb_dump(0, net, writer1,writer2)
     early_stopping = EarlyStopping()
     for epoch in range(epochs):  # Loop over the dataset multiple times
         for i, data in enumerate(trainloader, 0):
@@ -117,28 +118,30 @@ def train_net(epochs, path_name, net, optimizer):
 
             # Print statistics every couple of mini-batches
             if i % config_batch_statistics_freq == 0:
-                writer.add_scalar('Loss/batch', train_loss, n_iter)
-                writer.add_scalar('Accuracy/batch', train_acc, n_iter)
+                writer2.add_scalar('Loss/batch', train_loss, n_iter)
+                writer2.add_scalar('Accuracy/batch', train_acc, n_iter)
 
                 if config_dump_movement:
                     new_weights = flat_weight_dump(net)
                     movement = torch.norm(
                         torch.add(old_weights, new_weights, alpha=-1))
-                    writer.add_scalar('Movement', movement.item(), n_iter)
+                    writer2.add_scalar('Movement', movement.item(), n_iter)
 
-                writer.flush()
+                writer2.flush()
                 n_iter = n_iter + 1
 	
 #	early_stopping(test_loss)
         (test_loss, test_acc, _) = test(testloader, net, device)
     
-    
-        early_stopping(test_loss)
-        tb_dump(epoch+1, net, writer)
+        if epoch > config_prune_epoch + 5 :
+            early_stopping(test_loss)
+        tb_dump(epoch+1, net, writer1,writer2)
+        
         if early_stopping.early_stop:
             break
     print('Finished Training')
-    writer.close()
+    writer2.close()
+    writer1.close()
 
 
 # ################
@@ -158,9 +161,13 @@ config_batch_size = config['batch_size']
 config_optimizer = config['optimizer']
 config_lr = config['lr']
 config_momentum = config['momentum']
+config_prune_epoch = config["prune_epoch"]
+config_perc_to_prune = config['perc_to_prune']
+config_step_of_prune = config["step_of_prune"]
 config_radius = config['radius']
 config_epochs = config['epochs']
-config_tb_path = config['tb_path']
+config_tb_path_test = config['tb_path_test']
+config_tb_path_train = config['tb_path_train']
 config_batch_statistics_freq = config['batch_statistics_freq']
 config_dump_movement = bool(config['dump_movement'] == 1)
 config_projected = bool(config['projected'] == 1)
@@ -227,19 +234,26 @@ elif config_optimizer == 8:
         initial_accumulator_value=config_initial_accumulator_value,
         eps=config_eps)
 elif config_optimizer == 9:
-    optimizer = CustomOptimizer(net.parameters(),lr=config_lr, momentum=config_momentum)
+    optimizer = CustomOptimizer(net.parameters(),lr=config_lr, 
+    momentum=config_momentum,
+    prune_epoch=config_prune_epoch,
+    step_of_prune=config_step_of_prune,
+    perc_to_prune = config_perc_to_prune,
+    len_step = len(trainloader))
 
 # Writer path for display on TensorBoard
-if not os.path.exists(config_tb_path):
-    os.makedirs(config_tb_path)
-path_name = config_tb_path + \
-    str(config_experiment_number) + "_" + str(optimizer)
+if not os.path.exists(config_tb_path_test):
+    os.makedirs(config_tb_path_test)
+if not os.path.exists(config_tb_path_train):
+    os.makedirs(config_tb_path_train)
+#path_name = config_tb_path + \
+#    str(config_experiment_number) + "_" + str(optimizer)
 
 # Initialize weights
 net.apply(weights_init_uniform_rule)
 
 train_net(
-    epochs=config_epochs, path_name="/logs", net=net, optimizer=optimizer)
+    epochs=config_epochs, path_name_test=config_tb_path_test,path_name_train=config_tb_path_train, net=net, optimizer=optimizer)
 
 # Dump some info on the range of parameters after training is finished
 for param in net.parameters():
