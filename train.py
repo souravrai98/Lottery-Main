@@ -19,7 +19,7 @@ from AdaACSA import *
 from AdaAGDplus import *
 from AdaJRGS import *
 from CustomOptimizer import *
-
+from CustomOptimizerT import *
 
 from loader import *
 from models import MODELS_MAP
@@ -87,6 +87,9 @@ def train_net(epochs, path_name_test,path_name_train, net, optimizer):
     early_stopping = EarlyStopping()
     for epoch in range(epochs):  # Loop over the dataset multiple times
         for i, data in enumerate(trainloader, 0):
+            #Plotting the weight distribution 
+            #weight_histograms(writer2, epoch, net)
+
             # Get the inputs
             inputs, labels = data
             inputs = inputs.to(device)
@@ -132,13 +135,25 @@ def train_net(epochs, path_name_test,path_name_train, net, optimizer):
 	
 #	early_stopping(test_loss)
         (test_loss, test_acc, _) = test(testloader, net, device)
-    
-        if epoch > config_prune_epoch + 5 :
-            early_stopping(test_loss)
+        #Save the checkpoint
+        if(epoch%(20)==0):
+          checkpoint = {
+            'epoch': epoch ,
+            'state_dict': net.state_dict(),
+            #'optimizer': optimizer.state_dict(),
+          }
+        
+           
+          save_ckp(checkpoint, f'checkpoints1/epoch_model_{epoch}.pth')
+
+       
         tb_dump(epoch+1, net, writer1,writer2)
         
-        if early_stopping.early_stop:
-            break
+        if config_e_stop == 1:
+            if epoch > config_epoch_for_estop:
+                early_stopping(test_loss)
+                if early_stopping.early_stop:
+                    break
     print('Finished Training')
     writer2.close()
     writer1.close()
@@ -162,6 +177,7 @@ config_optimizer = config['optimizer']
 config_lr = config['lr']
 config_momentum = config['momentum']
 config_prune_epoch = config["prune_epoch"]
+config_unfreeze_epoch = config["unfreeze_epoch"]
 config_perc_to_prune = config['perc_to_prune']
 config_step_of_prune = config["step_of_prune"]
 config_radius = config['radius']
@@ -175,6 +191,12 @@ config_weight_decay = config['weight_decay']
 config_radius = config['radius']
 config_random_seed = config['random_seed']
 config_gamma0 = config['gamma0']
+config_e_stop = config["e_stop"]
+config_epoch_for_estop = config["epoch_for_estop"]
+config_one_shot_prune = config["one_shot_prune"]
+config_iterative_prune = config["iterative_prune"]
+config_epochs_to_finetune = config["epochs_to_finetune"]
+config_epochs_to_densetrain = config["epochs_to_densetrain"]
 #config_initial_accumulator_value = config['initial_accumulator_value']
 #config_beta = config['beta']
 #config_eps = config['eps']
@@ -236,10 +258,36 @@ elif config_optimizer == 8:
 elif config_optimizer == 9:
     optimizer = CustomOptimizer(net.parameters(),lr=config_lr, 
     momentum=config_momentum,
+    weight_decay=config_weight_decay,
+    len_step = len(trainloader),
+    
+    one_shot_prune  = config_one_shot_prune,
     prune_epoch=config_prune_epoch,
     step_of_prune=config_step_of_prune,
     perc_to_prune = config_perc_to_prune,
-    len_step = len(trainloader))
+
+    iterative_prune = config_iterative_prune,
+    unfreeze_epoch=config_unfreeze_epoch,
+    epochs_to_densetrain = config_epochs_to_densetrain,
+    epochs_to_finetune= config_epochs_to_finetune
+   )
+
+elif config_optimizer == 10:
+    optimizer = CustomOptimizerT(net.parameters(),lr=config_lr, 
+    momentum=config_momentum,
+    weight_decay=config_weight_decay,
+    len_step = len(trainloader),
+    
+    one_shot_prune  = config_one_shot_prune,
+    prune_epoch=config_prune_epoch,
+    step_of_prune=config_step_of_prune,
+    perc_to_prune = config_perc_to_prune,
+
+    iterative_prune = config_iterative_prune,
+    unfreeze_epoch=config_unfreeze_epoch,
+    epochs_to_densetrain = config_epochs_to_densetrain,
+    epochs_to_finetune= config_epochs_to_finetune
+   )
 
 # Writer path for display on TensorBoard
 if not os.path.exists(config_tb_path_test):
@@ -252,8 +300,12 @@ if not os.path.exists(config_tb_path_train):
 # Initialize weights
 net.apply(weights_init_uniform_rule)
 
+#load the model
+ckp_path = 'checkpoints/epoch_model_40.pth'
+checkpoint_model, start_epoch = load_ckp(ckp_path, net)
+
 train_net(
-    epochs=config_epochs, path_name_test=config_tb_path_test,path_name_train=config_tb_path_train, net=net, optimizer=optimizer)
+    epochs=config_epochs, path_name_test=config_tb_path_test,path_name_train=config_tb_path_train, net=checkpoint_model, optimizer=optimizer)
 
 # Dump some info on the range of parameters after training is finished
 for param in net.parameters():

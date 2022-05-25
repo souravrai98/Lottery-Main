@@ -9,11 +9,11 @@ def mnist_loader(batch_size):
          transforms.Normalize((0.13, ), (0.3, ))])
     # Load   
     trainset = torchvision.datasets.MNIST(
-        root='/scratch/avladu/data', train=True, download=True, transform=transform)
+        root='/home/sourav', train=True, download=True, transform=transform)
     trainloader = torch.utils.data.DataLoader(
         trainset, batch_size=batch_size, shuffle=True, num_workers=2)
     testset = torchvision.datasets.MNIST(
-        root='/scratch/avladu/data', train=False, download=True, transform=transform)
+        root='/home/sourav', train=False, download=True, transform=transform)
     testloader = torch.utils.data.DataLoader(
         testset, batch_size=batch_size, shuffle=False, num_workers=2)
     return trainloader, testloader
